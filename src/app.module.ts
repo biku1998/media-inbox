@@ -6,9 +6,16 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { HealthController } from 'src/common/health/health.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { UploadsModule } from 'src/uploads/uploads.module';
+import { JobsModule } from 'src/jobs/jobs.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, AuthModule, UploadsModule],
+  imports: [
+    AppConfigModule,
+    PrismaModule,
+    AuthModule,
+    UploadsModule,
+    JobsModule,
+  ],
   controllers: [AppController, HealthController],
   providers: [AppService],
 })

@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { S3Service } from './s3.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { JobsService, MediaProcessingJobData } from 'src/jobs/jobs.service';
 import { PresignUploadDto } from './dto/presign-upload.dto';
 import { PresignResponseDto } from './dto/presign-response.dto';
 import { UploadCompleteDto } from './dto/upload-complete.dto';
@@ -15,6 +16,7 @@ export class UploadsService {
   constructor(
     private readonly s3Service: S3Service,
     private readonly prisma: PrismaService,
+    private readonly jobsService: JobsService,
   ) {}
 
   async generatePresignedUploadUrl(
@@ -131,7 +133,17 @@ export class UploadsService {
       `Asset created for ${uploadCompleteDto.filename} with ID: ${asset.id}`,
     );
 
-    // TODO: Enqueue processing job here when we implement BullMQ
+    // Enqueue media processing job
+    const jobData: MediaProcessingJobData = {
+      assetId: asset.id,
+      objectKey: asset.objectKey,
+      mimeType: asset.mime,
+      fileSize: asset.size,
+      originalFilename: uploadCompleteDto.filename,
+    };
+
+    await this.jobsService.addMediaProcessingJob(jobData);
+    this.logger.log(`Media processing job enqueued for asset: ${asset.id}`);
 
     return {
       assetId: asset.id,
