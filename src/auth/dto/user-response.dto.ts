@@ -1,9 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 export class UserResponseDto {
   @ApiProperty({
     description: 'Unique user identifier',
-    example: 'clx1234567890abcdef',
+    example: 'cmeq1ozf60000z9dbdzf42dn0',
+    pattern: '^[a-zA-Z0-9]{25}$',
   })
   id: string;
 
@@ -16,19 +18,22 @@ export class UserResponseDto {
   @ApiProperty({
     description: 'User role',
     example: 'USER',
-    enum: ['USER', 'ADMIN'],
+    enum: UserRole,
+    enumName: 'UserRole',
   })
-  role: 'USER' | 'ADMIN';
+  role: UserRole;
 
   @ApiProperty({
     description: 'User creation timestamp',
-    example: '2024-01-15T10:30:00.000Z',
+    example: '2025-08-24T18:52:08.659Z',
+    format: 'date-time',
   })
   createdAt: Date;
 
   @ApiProperty({
     description: 'User last update timestamp',
-    example: '2024-01-15T10:30:00.000Z',
+    example: '2025-08-24T18:52:08.659Z',
+    format: 'date-time',
   })
   updatedAt: Date;
 }

@@ -5,9 +5,10 @@ import { AppConfigModule } from 'src/common/config/config.module';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { HealthController } from 'src/common/health/health.controller';
 import { AuthModule } from 'src/auth/auth.module';
+import { UploadsModule } from 'src/uploads/uploads.module';
 
 @Module({
-  imports: [AppConfigModule, PrismaModule, AuthModule],
+  imports: [AppConfigModule, PrismaModule, AuthModule, UploadsModule],
   controllers: [AppController, HealthController],
   providers: [AppService],
 })

@@ -1,11 +1,13 @@
-import { IsString } from 'class-validator';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RefreshTokenDto {
   @ApiProperty({
-    description: 'JWT refresh token',
+    description: 'Refresh token for generating new access token',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    minLength: 1,
   })
-  @IsString()
+  @IsString({ message: 'Refresh token must be a string' })
+  @IsNotEmpty({ message: 'Refresh token is required' })
   refreshToken: string;
 }
