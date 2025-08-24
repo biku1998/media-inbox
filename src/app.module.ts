@@ -7,6 +7,7 @@ import { HealthController } from 'src/common/health/health.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { UploadsModule } from 'src/uploads/uploads.module';
 import { JobsModule } from 'src/jobs/jobs.module';
+import { AssetsModule } from 'src/assets/assets.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { JobsModule } from 'src/jobs/jobs.module';
     AuthModule,
     UploadsModule,
     JobsModule,
+    AssetsModule,
   ],
   controllers: [AppController, HealthController],
   providers: [AppService],
