@@ -3,6 +3,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from 'src/app.module';
 import { testPrisma } from './test-setup';
+import { AuthResponseDto } from 'src/auth/dto/auth-response.dto';
+import { UserResponseDto } from 'src/auth/dto/user-response.dto';
 
 describe('Authentication (e2e)', () => {
   let app: INestApplication;
@@ -42,12 +44,13 @@ describe('Authentication (e2e)', () => {
         .send(userData)
         .expect(201);
 
-      expect(response.body).toHaveProperty('accessToken');
-      expect(response.body).toHaveProperty('refreshToken');
-      expect(response.body).toHaveProperty('user');
-      expect(response.body.user.email).toBe(userData.email);
-      expect(response.body.user.role).toBe('USER');
-      expect(response.body.user).not.toHaveProperty('passwordHash');
+      const body = response.body as AuthResponseDto;
+      expect(body).toHaveProperty('accessToken');
+      expect(body).toHaveProperty('refreshToken');
+      expect(body).toHaveProperty('user');
+      expect(body.user.email).toBe(userData.email);
+      expect(body.user.role).toBe('USER');
+      expect(body.user).not.toHaveProperty('passwordHash');
 
       // Verify user was created in database
       const dbUser = await testPrisma.user.findUnique({
@@ -76,7 +79,8 @@ describe('Authentication (e2e)', () => {
         .send(userData)
         .expect(201);
 
-      expect(response.body.user.role).toBe('ADMIN');
+      const body = response.body as AuthResponseDto;
+      expect(body.user.role).toBe('ADMIN');
     });
 
     it('should fail when registering with existing email', async () => {
@@ -143,10 +147,11 @@ describe('Authentication (e2e)', () => {
         .send(loginData)
         .expect(200);
 
-      expect(response.body).toHaveProperty('accessToken');
-      expect(response.body).toHaveProperty('refreshToken');
-      expect(response.body).toHaveProperty('user');
-      expect(response.body.user.email).toBe(loginData.email);
+      const body = response.body as AuthResponseDto;
+      expect(body).toHaveProperty('accessToken');
+      expect(body).toHaveProperty('refreshToken');
+      expect(body).toHaveProperty('user');
+      expect(body.user.email).toBe(loginData.email);
     });
 
     it('should fail with invalid email', async () => {
@@ -186,7 +191,8 @@ describe('Authentication (e2e)', () => {
           password: 'password123',
         });
 
-      refreshToken = response.body.refreshToken;
+      const body = response.body as AuthResponseDto;
+      refreshToken = body.refreshToken;
     });
 
     it('should refresh tokens successfully', async () => {
@@ -199,8 +205,9 @@ describe('Authentication (e2e)', () => {
       expect(response.body).toHaveProperty('refreshToken');
       expect(response.body).toHaveProperty('user');
 
+      const body = response.body as AuthResponseDto;
       // New refresh token should be different
-      expect(response.body.refreshToken).not.toBe(refreshToken);
+      expect(body.refreshToken).not.toBe(refreshToken);
 
       // Access token might be the same if generated at the same time with same user data
       // but refresh token should always be different for security
@@ -235,7 +242,8 @@ describe('Authentication (e2e)', () => {
           password: 'password123',
         });
 
-      accessToken = response.body.accessToken;
+      const body = response.body as AuthResponseDto;
+      accessToken = body.accessToken;
     });
 
     it('should return user profile with valid token', async () => {
@@ -244,11 +252,12 @@ describe('Authentication (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
-      expect(response.body).toHaveProperty('id');
-      expect(response.body).toHaveProperty('email');
-      expect(response.body).toHaveProperty('role');
-      expect(response.body.email).toBe('profile@example.com');
-      expect(response.body).not.toHaveProperty('passwordHash');
+      const body = response.body as UserResponseDto;
+      expect(body).toHaveProperty('id');
+      expect(body).toHaveProperty('email');
+      expect(body).toHaveProperty('role');
+      expect(body.email).toBe('profile@example.com');
+      expect(body).not.toHaveProperty('passwordHash');
     });
 
     it('should fail without authorization header', async () => {
@@ -274,7 +283,8 @@ describe('Authentication (e2e)', () => {
         })
         .expect(201);
 
-      const { accessToken, refreshToken } = registerResponse.body;
+      const body = registerResponse.body as AuthResponseDto;
+      const { accessToken, refreshToken } = body;
 
       // 2. Access profile with access token
       await request(app.getHttpServer())
@@ -288,7 +298,8 @@ describe('Authentication (e2e)', () => {
         .send({ refreshToken })
         .expect(200);
 
-      const newAccessToken = refreshResponse.body.accessToken;
+      const refreshBody = refreshResponse.body as AuthResponseDto;
+      const newAccessToken = refreshBody.accessToken;
 
       // 4. Access profile with new access token
       await request(app.getHttpServer())
