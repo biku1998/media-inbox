@@ -1,4 +1,11 @@
-import { Controller, Post, Body, UseGuards, Get } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Get,
+  Request,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -11,6 +18,7 @@ import { PresignUploadDto } from './dto/presign-upload.dto';
 import { PresignResponseDto } from './dto/presign-response.dto';
 import { UploadCompleteDto } from './dto/upload-complete.dto';
 import { UploadCompleteResponseDto } from './dto/upload-complete-response.dto';
+import { Request as TypedRequest } from 'src/types';
 
 @ApiTags('uploads')
 @Controller('uploads')
@@ -69,8 +77,9 @@ export class UploadsController {
   })
   async completeUpload(
     @Body() uploadCompleteDto: UploadCompleteDto,
+    @Request() req: TypedRequest,
   ): Promise<UploadCompleteResponseDto> {
-    return this.uploadsService.completeUpload(uploadCompleteDto);
+    return this.uploadsService.completeUpload(uploadCompleteDto, req.user.id);
   }
 
   @Get('health')

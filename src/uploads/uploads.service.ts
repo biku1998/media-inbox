@@ -102,6 +102,7 @@ export class UploadsService {
 
   async completeUpload(
     uploadCompleteDto: UploadCompleteDto,
+    userId: string,
   ): Promise<UploadCompleteResponseDto> {
     // Validate file type
     this.validateFileType(uploadCompleteDto.contentType);
@@ -121,7 +122,7 @@ export class UploadsService {
         mime: uploadCompleteDto.contentType,
         size: uploadCompleteDto.fileSize,
         status: 'PENDING',
-        ownerId: 'cmeq1ozf60000z9dbdzf42dn0', // TODO: Get from JWT token properly
+        ownerId: userId,
         meta: {
           originalFilename: uploadCompleteDto.filename,
           sha256Hash: uploadCompleteDto.sha256Hash,
