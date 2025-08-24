@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum AssetStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum JobState {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+  DLQ
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  sessions  Session[]
+  assets    Asset[]
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String    @map("user_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Asset {
+  id        String      @id @default(cuid())
+  ownerId   String      @map("owner_id")
+  objectKey String      @unique @map("object_key")
+  mime      String
+  size      Int
+  status    AssetStatus @default(PENDING)
+  thumbKey  String?     @map("thumb_key")
+  meta      Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  owner User  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  jobs  Job[]
+
+  @@map("assets")
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  assetId   String   @map("asset_id")
+  state     JobState @default(WAITING)
+  attempts  Int      @default(0)
+  lastError String?  @map("last_error")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("jobs")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String   @map("actor_id")
+  action    String
+  subject   String
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
