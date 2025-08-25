@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3Service } from 'src/uploads/s3.service';
+import { CacheService } from 'src/common/cache/cache.service';
 import { ListAssetsDto } from './dto/list-assets.dto';
 import { AssetResponseDto } from './dto/asset-response.dto';
 import { ListAssetsResponseDto } from './dto/list-assets-response.dto';
@@ -32,6 +33,7 @@ export class AssetsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3Service: S3Service,
+    private readonly cacheService: CacheService,
   ) {}
 
   async listAssets(
@@ -114,6 +116,14 @@ export class AssetsService {
     assetId: string,
     userId: string,
   ): Promise<AssetResponseDto> {
+    // Try to get from cache first
+    const cachedAsset =
+      await this.cacheService.getAsset<AssetResponseDto>(assetId);
+    if (cachedAsset) {
+      this.logger.debug(`Cache hit for asset: ${assetId}`);
+      return cachedAsset;
+    }
+
     const asset = await this.prisma.asset.findUnique({
       where: { id: assetId },
       include: {
@@ -135,7 +145,12 @@ export class AssetsService {
       throw new ForbiddenException('Access denied to this asset');
     }
 
-    return this.mapToAssetResponse(asset);
+    const assetResponse = await this.mapToAssetResponse(asset);
+
+    // Cache the asset response
+    await this.cacheService.setAsset(assetId, assetResponse);
+
+    return assetResponse;
   }
 
   async deleteAsset(assetId: string, userId: string): Promise<void> {
@@ -169,6 +184,10 @@ export class AssetsService {
     await this.prisma.asset.delete({
       where: { id: assetId },
     });
+
+    // Invalidate cache
+    await this.cacheService.invalidateAsset(assetId);
+    await this.cacheService.invalidateUserAssets(userId);
 
     this.logger.log(`Asset ${assetId} deleted by user ${userId}`);
   }
@@ -204,7 +223,13 @@ export class AssetsService {
       },
     });
 
-    return this.mapToAssetResponse(updatedAsset);
+    const assetResponse = await this.mapToAssetResponse(updatedAsset);
+
+    // Invalidate cache
+    await this.cacheService.invalidateAsset(assetId);
+    await this.cacheService.invalidateUserAssets(userId);
+
+    return assetResponse;
   }
 
   private async mapToAssetResponse(

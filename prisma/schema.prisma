@@ -30,6 +30,7 @@ model Session {
   createdAt        DateTime  @default(now()) @map("created_at")
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, expiresAt])
   @@map("sessions")
 }
 
@@ -47,6 +48,9 @@ model Asset {
   owner     User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   jobs      Job[]
 
+  @@index([ownerId])
+  @@index([status, createdAt])
+  @@index([objectKey])
   @@map("assets")
 }
 
@@ -60,6 +64,8 @@ model Job {
   updatedAt DateTime @updatedAt @map("updated_at")
   asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
+  @@index([assetId])
+  @@index([state])
   @@map("jobs")
 }
 
@@ -72,6 +78,7 @@ model AuditLog {
   createdAt DateTime @default(now()) @map("created_at")
   actor     User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
 
+  @@index([actorId, createdAt])
   @@map("audit_logs")
 }
 

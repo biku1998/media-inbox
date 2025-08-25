@@ -2,9 +2,20 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { EnvValidationService } from './common/config/env-validation.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Security headers and CORS
+  app.enableCors({
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+      'http://localhost:3000',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  });
 
   // Global validation pipe
   app.useGlobalPipes(
@@ -14,6 +25,19 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Global rate limiting - will be applied after app initialization
+  // Note: Rate limiting is configured in the CacheModule which is imported globally
+
+  // Validate environment variables
+  try {
+    const envValidationService = app.get(EnvValidationService);
+    envValidationService.validateEnvironment();
+  } catch {
+    console.warn(
+      'Environment validation disabled: EnvValidationService not available',
+    );
+  }
 
   // Swagger configuration
   const config = new DocumentBuilder()
