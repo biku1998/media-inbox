@@ -23,23 +23,33 @@ export class S3Service {
     const endpoint = this.configService.get<string>('S3_ENDPOINT');
     const accessKey = this.configService.get<string>('S3_ACCESS_KEY');
     const secretKey = this.configService.get<string>('S3_SECRET_KEY');
+    const region = this.configService.get<string>('S3_REGION', 'ap-south-1');
 
-    if (!endpoint || !accessKey || !secretKey) {
+    // For AWS S3, endpoint is optional (uses default AWS endpoints)
+    if (!accessKey || !secretKey) {
       throw new Error(
-        'Missing required S3 configuration: S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY',
+        'Missing required S3 configuration: S3_ACCESS_KEY, S3_SECRET_KEY',
       );
     }
 
-    this.s3Client = new S3Client({
-      endpoint,
-      region: this.configService.get<string>('S3_REGION') || 'us-east-1',
+    const clientConfig: {
+      region: string;
+      credentials: { accessKeyId: string; secretAccessKey: string };
+      endpoint?: string;
+    } = {
+      region,
       credentials: {
         accessKeyId: accessKey,
         secretAccessKey: secretKey,
       },
-      forcePathStyle:
-        this.configService.get<boolean>('S3_FORCE_PATH_STYLE') ?? true,
-    });
+    };
+
+    // Only add endpoint if explicitly provided (for local testing or other S3-compatible services)
+    if (endpoint) {
+      clientConfig.endpoint = endpoint;
+    }
+
+    this.s3Client = new S3Client(clientConfig);
   }
 
   async ensureBucketExists(): Promise<void> {

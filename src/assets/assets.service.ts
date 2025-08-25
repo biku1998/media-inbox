@@ -15,6 +15,16 @@ type AssetWithOwner = Asset & {
   owner: Pick<User, 'id' | 'email'>;
 };
 
+interface AssetWhereClause {
+  ownerId: string;
+  status?: AssetStatus;
+  mime?: string;
+  meta?: {
+    path: string[];
+    string_contains: string;
+  };
+}
+
 @Injectable()
 export class AssetsService {
   private readonly logger = new Logger(AssetsService.name);
@@ -31,7 +41,7 @@ export class AssetsService {
     const { cursor, limit = 20, status, search, mimeType } = query;
 
     // Build where clause with user isolation
-    const where: any = {
+    const where: AssetWhereClause = {
       ownerId: userId,
     };
 
