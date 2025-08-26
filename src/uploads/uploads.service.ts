@@ -36,11 +36,17 @@ export class UploadsService {
     // Generate unique object key
     const objectKey = this.generateObjectKey(presignDto.filename);
 
-    // Generate presigned URL
+    // Generate presigned URL with metadata
+    const metadata = {
+      'x-amz-meta-original-filename': presignDto.filename,
+      'x-amz-meta-file-size': presignDto.fileSize.toString(),
+    };
+
     const presignedUrl = await this.s3Service.generatePresignedPutUrl(
       objectKey,
       presignDto.contentType,
       3600, // 1 hour expiration
+      metadata,
     );
 
     // Log upload start event

@@ -15,12 +15,22 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: {
-          expiresIn: configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m'),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const jwtSecret = configService.get<string>('JWT_SECRET');
+        if (!jwtSecret || jwtSecret === 'your-super-secret-jwt-key-here') {
+          throw new Error('JWT_SECRET must be set to a secure value');
+        }
+
+        return {
+          secret: jwtSecret,
+          signOptions: {
+            expiresIn: configService.get<string>(
+              'JWT_ACCESS_EXPIRES_IN',
+              '15m',
+            ),
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],

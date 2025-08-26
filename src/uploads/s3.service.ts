@@ -81,11 +81,13 @@ export class S3Service {
     key: string,
     contentType: string,
     expiresIn: number = 3600,
+    metadata?: Record<string, string>,
   ): Promise<string> {
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
       Key: key,
       ContentType: contentType,
+      Metadata: metadata,
     });
 
     return getSignedUrl(this.s3Client, command, { expiresIn });
