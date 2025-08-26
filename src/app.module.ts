@@ -10,6 +10,7 @@ import { AuthModule } from 'src/auth/auth.module';
 import { UploadsModule } from 'src/uploads/uploads.module';
 import { JobsModule } from 'src/jobs/jobs.module';
 import { AssetsModule } from 'src/assets/assets.module';
+import { AuditModule } from 'src/common/audit.module';
 import { RateLimitInterceptor } from 'src/common/interceptors/rate-limit.interceptor';
 import { LoggingInterceptor } from 'src/common/interceptors/logging.interceptor';
 import { SecurityMiddleware } from 'src/common/middleware/security.middleware';
@@ -25,6 +26,7 @@ import { EnvValidationService } from 'src/common/config/env-validation.service';
     UploadsModule,
     JobsModule,
     AssetsModule,
+    AuditModule,
   ],
   controllers: [AppController, HealthController],
   providers: [

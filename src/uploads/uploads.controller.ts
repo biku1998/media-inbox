@@ -3,14 +3,16 @@ import {
   Post,
   Body,
   UseGuards,
-  Get,
   Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiBody,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { UploadsService } from './uploads.service';
@@ -20,7 +22,7 @@ import { UploadCompleteDto } from './dto/upload-complete.dto';
 import { UploadCompleteResponseDto } from './dto/upload-complete-response.dto';
 import { Request as TypedRequest } from 'src/types';
 
-@ApiTags('uploads')
+@ApiTags('Uploads')
 @Controller('uploads')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
@@ -28,13 +30,12 @@ export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
 
   @Post('presign')
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
-    summary: 'Generate presigned URL for file upload',
-    description:
-      'Creates a presigned PUT URL for uploading files directly to S3/MinIO. ' +
-      'The URL allows clients to upload files without exposing S3 credentials. ' +
-      'File type and size validation is performed before generating the URL.',
+    summary: 'Generate presigned upload URL',
+    description: 'Generate a presigned URL for direct S3 upload',
   })
+  @ApiBody({ type: PresignUploadDto })
   @ApiResponse({
     status: 201,
     description: 'Presigned URL generated successfully',
@@ -50,18 +51,19 @@ export class UploadsController {
   })
   async generatePresignedUrl(
     @Body() presignDto: PresignUploadDto,
+    @Request() req: TypedRequest,
   ): Promise<PresignResponseDto> {
-    return this.uploadsService.generatePresignedUploadUrl(presignDto);
+    const userId = req.user.id;
+    return this.uploadsService.generatePresignedUploadUrl(presignDto, userId);
   }
 
   @Post('complete')
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
-    summary: 'Complete file upload and create asset record',
-    description:
-      'Marks the upload as complete and creates an asset record for processing. ' +
-      'This endpoint should be called after successfully uploading a file using the presigned URL. ' +
-      'The asset is created with PENDING status and will be queued for background processing.',
+    summary: 'Complete file upload',
+    description: 'Mark upload as complete and queue for processing',
   })
+  @ApiBody({ type: UploadCompleteDto })
   @ApiResponse({
     status: 201,
     description: 'Upload completed successfully',
@@ -69,7 +71,7 @@ export class UploadsController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Invalid file data or validation failed',
+    description: 'Invalid file data',
   })
   @ApiResponse({
     status: 401,
@@ -79,15 +81,15 @@ export class UploadsController {
     @Body() uploadCompleteDto: UploadCompleteDto,
     @Request() req: TypedRequest,
   ): Promise<UploadCompleteResponseDto> {
-    return this.uploadsService.completeUpload(uploadCompleteDto, req.user.id);
+    const userId = req.user.id;
+    return this.uploadsService.completeUpload(uploadCompleteDto, userId);
   }
 
-  @Get('health')
+  @Post('health')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Test S3 connection',
-    description:
-      'Checks if S3/MinIO connection is working properly. ' +
-      'Useful for monitoring and debugging S3 connectivity issues.',
+    description: 'Test the connection to S3 storage',
   })
   @ApiResponse({
     status: 200,
@@ -95,18 +97,16 @@ export class UploadsController {
     schema: {
       type: 'object',
       properties: {
-        status: { type: 'string' },
         connected: { type: 'boolean' },
-        timestamp: { type: 'string' },
+        message: { type: 'string' },
       },
     },
   })
   async testS3Connection() {
     const connected = await this.uploadsService.testS3Connection();
     return {
-      status: connected ? 'connected' : 'disconnected',
       connected,
-      timestamp: new Date().toISOString(),
+      message: connected ? 'S3 connection successful' : 'S3 connection failed',
     };
   }
 }
