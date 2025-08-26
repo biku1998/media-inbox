@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 export interface AuditEvent {
-  actorId: string;
+  actorId: string; // Keep required for database constraint
   action: string;
   subject: string;
   payload?: Record<string, any>;
@@ -253,6 +253,23 @@ export class AuditService {
       action,
       subject,
       payload,
+    });
+  }
+
+  /**
+   * Log system events (e.g., application startup, shutdown)
+   */
+  async logSystemEvent(
+    actorId: string,
+    action: string,
+    subject: string,
+    details?: Record<string, any>,
+  ): Promise<void> {
+    await this.logEvent({
+      actorId,
+      action,
+      subject,
+      payload: details,
     });
   }
 

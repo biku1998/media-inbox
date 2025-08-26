@@ -108,7 +108,7 @@ export class AuthService {
 
     // Generate tokens
     const accessToken = this.jwtService.sign(
-      { userId: user.id, email: user.email, role: user.role },
+      { sub: user.id, email: user.email, role: user.role },
       { expiresIn: '15m' },
     );
 
@@ -168,7 +168,7 @@ export class AuthService {
     // Generate new access token
     const accessToken = this.jwtService.sign(
       {
-        userId: session.user.id,
+        sub: session.user.id,
         email: session.user.email,
         role: session.user.role,
       },

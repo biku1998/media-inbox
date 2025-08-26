@@ -55,8 +55,18 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
 
     this.logger.log(`Starting media processing for asset: ${assetId}`);
 
+    // Get asset owner ID for audit logging
+    const asset = await this.prisma.asset.findUnique({
+      where: { id: assetId },
+      select: { ownerId: true },
+    });
+
+    if (!asset) {
+      throw new Error(`Asset ${assetId} not found`);
+    }
+
     // Log job started event
-    await this.auditService.logJobEvent('system', 'JOB_STARTED', assetId, {
+    await this.auditService.logJobEvent(asset.ownerId, 'JOB_STARTED', assetId, {
       jobId: String(job.id),
       objectKey,
       originalFilename,
@@ -163,13 +173,18 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
       }
 
       // Log job completed event
-      await this.auditService.logJobEvent('system', 'JOB_COMPLETED', assetId, {
-        jobId: String(job.id),
-        objectKey,
-        originalFilename,
-        thumbnailKey,
-        processingMeta,
-      });
+      await this.auditService.logJobEvent(
+        asset.ownerId,
+        'JOB_COMPLETED',
+        assetId,
+        {
+          jobId: String(job.id),
+          objectKey,
+          originalFilename,
+          thumbnailKey,
+          processingMeta,
+        },
+      );
 
       this.logger.log(
         `Image processing completed successfully for ${originalFilename}`,
@@ -190,13 +205,18 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
       );
 
       // Log job failed event
-      await this.auditService.logJobEvent('system', 'JOB_FAILED', assetId, {
-        jobId: String(job.id),
-        objectKey,
-        originalFilename,
-        error: error instanceof Error ? error.message : String(error),
-        attempts: job.attemptsMade,
-      });
+      await this.auditService.logJobEvent(
+        asset.ownerId,
+        'JOB_FAILED',
+        assetId,
+        {
+          jobId: String(job.id),
+          objectKey,
+          originalFilename,
+          error: error instanceof Error ? error.message : String(error),
+          attempts: job.attemptsMade,
+        },
+      );
 
       // Update asset status to FAILED
       await this.prisma.asset.update({
