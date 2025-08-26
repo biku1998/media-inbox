@@ -44,10 +44,8 @@ export class ThumbnailService {
       fit: this.configService.get<
         'cover' | 'contain' | 'fill' | 'inside' | 'outside'
       >('THUMBNAIL_FIT', 'cover'),
-      background: this.configService.get<string>(
-        'THUMBNAIL_BACKGROUND',
-        '#FFFFFF',
-      ),
+      background:
+        this.configService.get<string>('THUMBNAIL_BACKGROUND') || '#FFFFFF',
     };
   }
 
@@ -78,13 +76,25 @@ export class ThumbnailService {
       let sharpInstance = sharp(imageBuffer);
 
       // Resize the image
-      sharpInstance = sharpInstance.resize({
+      const resizeOptions: {
+        width: number;
+        height: number;
+        fit: 'cover' | 'contain' | 'fill' | 'inside' | 'outside';
+        withoutEnlargement: boolean;
+        background?: string;
+      } = {
         width: finalOptions.width,
         height: finalOptions.height,
         fit: finalOptions.fit,
-        background: finalOptions.background,
         withoutEnlargement: true, // Don't enlarge if image is smaller
-      });
+      };
+
+      // Only add background if it's a valid color
+      if (finalOptions.background && finalOptions.background.trim() !== '') {
+        resizeOptions.background = finalOptions.background;
+      }
+
+      sharpInstance = sharpInstance.resize(resizeOptions);
 
       // Apply format-specific processing
       const format = finalOptions.format;
