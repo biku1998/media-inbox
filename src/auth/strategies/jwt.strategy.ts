@@ -17,10 +17,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private configService: ConfigService,
     private prisma: PrismaService,
   ) {
+    const jwtSecret = configService.get<string>('JWT_SECRET');
+    if (!jwtSecret || jwtSecret === 'your-super-secret-jwt-key-here') {
+      throw new Error('JWT_SECRET must be set to a secure value');
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET', ''),
+      secretOrKey: jwtSecret,
     });
   }
 

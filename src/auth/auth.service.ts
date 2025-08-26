@@ -151,57 +151,81 @@ export class AuthService {
   ): Promise<AuthResponseDto> {
     const { refreshToken } = refreshTokenDto;
 
-    // Find session with this refresh token
-    const session = await this.prisma.session.findFirst({
+    // Find all sessions for this user and check if any match
+    const sessions = await this.prisma.session.findMany({
       where: {
-        refreshTokenHash: await bcrypt.hash(refreshToken, 10),
         expiresAt: { gt: new Date() },
         revokedAt: null,
       },
       include: { user: true },
     });
 
-    if (!session) {
+    // Find the session with matching refresh token
+    let matchingSession: (typeof sessions)[0] | null = null;
+    for (const session of sessions) {
+      const isValid = await bcrypt.compare(
+        refreshToken,
+        session.refreshTokenHash,
+      );
+      if (isValid) {
+        matchingSession = session;
+        break;
+      }
+    }
+
+    if (!matchingSession) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
     // Generate new access token
     const accessToken = this.jwtService.sign(
       {
-        sub: session.user.id,
-        email: session.user.email,
-        role: session.user.role,
+        sub: matchingSession.user.id,
+        email: matchingSession.user.email,
+        role: matchingSession.user.role,
       },
       { expiresIn: '15m' },
     );
 
-    this.logger.log(`Token refreshed for user: ${session.user.email}`);
+    this.logger.log(`Token refreshed for user: ${matchingSession.user.email}`);
 
     return {
       accessToken,
       refreshToken,
       user: {
-        id: session.user.id,
-        email: session.user.email,
-        role: session.user.role,
-        createdAt: session.user.createdAt,
-        updatedAt: session.user.updatedAt,
+        id: matchingSession.user.id,
+        email: matchingSession.user.email,
+        role: matchingSession.user.role,
+        createdAt: matchingSession.user.createdAt,
+        updatedAt: matchingSession.user.updatedAt,
       },
     };
   }
 
   async logout(userId: string, refreshToken?: string): Promise<void> {
     if (refreshToken) {
-      // Revoke specific refresh token
-      const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-      await this.prisma.session.updateMany({
+      // Find and revoke specific refresh token
+      const sessions = await this.prisma.session.findMany({
         where: {
           userId,
-          refreshTokenHash,
           revokedAt: null,
         },
-        data: { revokedAt: new Date() },
       });
+
+      // Find the session with matching refresh token
+      for (const session of sessions) {
+        const isValid = await bcrypt.compare(
+          refreshToken,
+          session.refreshTokenHash,
+        );
+        if (isValid) {
+          await this.prisma.session.update({
+            where: { id: session.id },
+            data: { revokedAt: new Date() },
+          });
+          break;
+        }
+      }
     } else {
       // Revoke all user sessions
       await this.prisma.session.updateMany({

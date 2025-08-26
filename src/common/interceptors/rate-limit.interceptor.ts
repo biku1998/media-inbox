@@ -51,19 +51,19 @@ export class RateLimitInterceptor implements NestInterceptor {
 
     // Rate limiting rules for different endpoints
     if (route === '/auth/login' || route === '/auth/register') {
-      return { ttl: 60, limit: 5 }; // 5 attempts per minute for auth
+      return { ttl: 60, limit: 3 }; // 3 attempts per minute for auth (more restrictive)
     }
 
     if (route === '/uploads/presign') {
-      return { ttl: 60, limit: 20 }; // 20 presign requests per minute
+      return { ttl: 60, limit: 10 }; // 10 presign requests per minute (more restrictive)
     }
 
     if (route === '/auth/refresh') {
-      return { ttl: 60, limit: 10 }; // 10 refresh attempts per minute
+      return { ttl: 60, limit: 5 }; // 5 refresh attempts per minute (more restrictive)
     }
 
     // Global rate limit for other endpoints
-    return { ttl: 60, limit: 100 }; // 100 requests per minute
+    return { ttl: 60, limit: 30 }; // 30 requests per minute (more restrictive)
   }
 
   private async checkRateLimit(
