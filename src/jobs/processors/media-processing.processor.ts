@@ -8,6 +8,8 @@ import {
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { S3Service } from 'src/uploads/s3.service';
+import { ThumbnailService } from 'src/uploads/thumbnail.service';
 
 import { JobsService, MediaProcessingJobData } from '../jobs.service';
 
@@ -18,6 +20,8 @@ export class MediaProcessingProcessor {
   constructor(
     private prisma: PrismaService,
     private jobsService: JobsService,
+    private s3Service: S3Service,
+    private thumbnailService: ThumbnailService,
   ) {}
 
   @OnQueueActive()
@@ -50,7 +54,7 @@ export class MediaProcessingProcessor {
 
       // Process based on file type
       if (mimeType.startsWith('image/')) {
-        await this.processImage(assetId, objectKey, originalFilename);
+        await this.processImage(assetId, objectKey, originalFilename, mimeType);
       } else if (mimeType.includes('pdf')) {
         await this.processDocument(assetId, objectKey, originalFilename);
       } else {
@@ -72,7 +76,13 @@ export class MediaProcessingProcessor {
       // Update asset status to FAILED
       await this.prisma.asset.update({
         where: { id: assetId },
-        data: { status: 'FAILED' },
+        data: {
+          status: 'FAILED',
+          meta: {
+            error: error instanceof Error ? error.message : String(error),
+            failedAt: new Date().toISOString(),
+          },
+        },
       });
 
       throw error;
@@ -83,25 +93,83 @@ export class MediaProcessingProcessor {
     assetId: string,
     objectKey: string,
     originalFilename: string,
+    mimeType: string,
   ): Promise<void> {
-    this.logger.log(`Processing image: ${originalFilename}`);
+    this.logger.log(`Processing image: ${originalFilename} (${mimeType})`);
 
-    // Generate thumbnail
-    const thumbnailKey = this.generateThumbnail(objectKey);
+    try {
+      // Download the image from S3
+      this.logger.debug(`Downloading image ${objectKey} from S3`);
+      const imageBuffer =
+        await this.s3Service.downloadObjectAsBuffer(objectKey);
+      this.logger.debug(`Downloaded image: ${imageBuffer.length} bytes`);
 
-    // Update asset with thumbnail key
-    await this.prisma.asset.update({
-      where: { id: assetId },
-      data: {
-        thumbKey: thumbnailKey,
-        meta: {
-          processed: true,
-          thumbnailGenerated: true,
-          originalFilename,
-          processedAt: new Date().toISOString(),
+      // Extract image format from MIME type
+      const imageFormat = this.extractImageFormat(mimeType);
+      this.logger.debug(`Detected image format: ${imageFormat}`);
+
+      // Generate thumbnail
+      this.logger.debug(`Generating thumbnail for ${originalFilename}`);
+      const thumbnailResult = await this.thumbnailService.processImageFormat(
+        imageBuffer,
+        imageFormat,
+        {
+          maxWidth: 300,
+          maxHeight: 300,
+          quality: 80,
+          format: 'jpeg',
         },
-      },
-    });
+      );
+
+      // Generate thumbnail key
+      const thumbnailKey = this.generateThumbnailKey(
+        objectKey,
+        thumbnailResult.format,
+      );
+      this.logger.debug(`Generated thumbnail key: ${thumbnailKey}`);
+
+      // Upload thumbnail to S3
+      this.logger.debug(`Uploading thumbnail to S3: ${thumbnailKey}`);
+      await this.s3Service.uploadObject(
+        thumbnailKey,
+        thumbnailResult.buffer,
+        `image/${thumbnailResult.format}`,
+      );
+
+      // Update asset with thumbnail key and metadata
+      await this.prisma.asset.update({
+        where: { id: assetId },
+        data: {
+          thumbKey: thumbnailKey,
+          meta: {
+            processed: true,
+            thumbnailGenerated: true,
+            originalFilename,
+            originalSize: imageBuffer.length,
+            thumbnailSize: thumbnailResult.size,
+            originalDimensions: `${thumbnailResult.metadata.width}x${thumbnailResult.metadata.height}`,
+            thumbnailDimensions: `${thumbnailResult.width}x${thumbnailResult.height}`,
+            compressionRatio:
+              (
+                ((imageBuffer.length - thumbnailResult.size) /
+                  imageBuffer.length) *
+                100
+              ).toFixed(1) + '%',
+            format: imageFormat,
+            processedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      this.logger.log(
+        `Image processing completed successfully for ${originalFilename}`,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to process image ${originalFilename}:`, error);
+      throw new Error(
+        `Image processing failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async processDocument(
@@ -147,24 +215,34 @@ export class MediaProcessingProcessor {
     });
   }
 
-  private generateThumbnail(objectKey: string): string {
-    try {
-      // Generate thumbnail key
-      const thumbnailKey = objectKey.replace(/\.[^/.]+$/, '_thumb.jpg');
+  /**
+   * Extract image format from MIME type
+   * @param mimeType - The MIME type string
+   * @returns string - The image format
+   */
+  private extractImageFormat(mimeType: string): string {
+    const formatMap: Record<string, string> = {
+      'image/jpeg': 'jpeg',
+      'image/jpg': 'jpeg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/tiff': 'tiff',
+      'image/bmp': 'bmp',
+    };
 
-      // For now, we'll create a placeholder thumbnail
-      // In a real implementation, you'd download the image from S3, resize it, and upload the thumbnail
-      this.logger.log(`Would generate thumbnail: ${thumbnailKey}`);
+    return formatMap[mimeType.toLowerCase()] || 'jpeg';
+  }
 
-      // TODO: Implement actual thumbnail generation
-      // 1. Download image from S3
-      // 2. Resize using Sharp
-      // 3. Upload thumbnail to S3
-
-      return thumbnailKey;
-    } catch (error) {
-      this.logger.error('Failed to generate thumbnail:', error);
-      throw error;
-    }
+  /**
+   * Generate thumbnail key for S3 storage
+   * @param originalKey - The original object key
+   * @param format - The thumbnail format
+   * @returns string - The thumbnail object key
+   */
+  private generateThumbnailKey(originalKey: string, format: string): string {
+    // Remove file extension and add thumbnail suffix
+    const baseKey = originalKey.replace(/\.[^/.]+$/, '');
+    return `${baseKey}_thumb.${format}`;
   }
 }

@@ -9,6 +9,7 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Readable } from 'stream';
 
 @Injectable()
 export class S3Service {
@@ -123,6 +124,101 @@ export class S3Service {
       this.logger.log(`Object ${key} deleted successfully`);
     } catch (error) {
       this.logger.error(`Failed to delete object ${key}:`, error);
+      throw error;
+    }
+  }
+
+  // New methods for thumbnail generation
+
+  /**
+   * Download an object from S3 as a Buffer
+   * @param key - S3 object key
+   * @returns Promise<Buffer> - The file content as a buffer
+   */
+  async downloadObjectAsBuffer(key: string): Promise<Buffer> {
+    try {
+      this.logger.debug(`Downloading object ${key} as buffer`);
+
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+
+      const response = await this.s3Client.send(command);
+
+      if (!response.Body) {
+        throw new Error(`No body returned for object ${key}`);
+      }
+
+      // Convert stream to buffer
+      const chunks: Buffer[] = [];
+      const stream = response.Body as Readable;
+
+      return new Promise((resolve, reject) => {
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+        stream.on('end', () => resolve(Buffer.concat(chunks)));
+        stream.on('error', reject);
+      });
+    } catch (error) {
+      this.logger.error(`Failed to download object ${key} as buffer:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upload a buffer to S3 as an object
+   * @param key - S3 object key
+   * @param buffer - File content as buffer
+   * @param contentType - MIME type of the file
+   * @returns Promise<void>
+   */
+  async uploadObject(
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<void> {
+    try {
+      this.logger.debug(`Uploading object ${key} (${buffer.length} bytes)`);
+
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ContentLength: buffer.length,
+      });
+
+      await this.s3Client.send(command);
+      this.logger.log(`Object ${key} uploaded successfully`);
+    } catch (error) {
+      this.logger.error(`Failed to upload object ${key}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get an object from S3 as a readable stream
+   * @param key - S3 object key
+   * @returns Promise<Readable> - The file content as a readable stream
+   */
+  async getObjectStream(key: string): Promise<Readable> {
+    try {
+      this.logger.debug(`Getting object ${key} as stream`);
+
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+
+      const response = await this.s3Client.send(command);
+
+      if (!response.Body) {
+        throw new Error(`No body returned for object ${key}`);
+      }
+
+      return response.Body as Readable;
+    } catch (error) {
+      this.logger.error(`Failed to get object ${key} as stream:`, error);
       throw error;
     }
   }

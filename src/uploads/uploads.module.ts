@@ -5,11 +5,12 @@ import { JobsModule } from 'src/jobs/jobs.module';
 import { S3Service } from './s3.service';
 import { UploadsService } from './uploads.service';
 import { UploadsController } from './uploads.controller';
+import { ThumbnailService } from './thumbnail.service';
 
 @Module({
   imports: [ConfigModule, PrismaModule, JobsModule],
   controllers: [UploadsController],
-  providers: [S3Service, UploadsService],
-  exports: [S3Service, UploadsService],
+  providers: [S3Service, UploadsService, ThumbnailService],
+  exports: [S3Service, UploadsService, ThumbnailService],
 })
 export class UploadsModule {}

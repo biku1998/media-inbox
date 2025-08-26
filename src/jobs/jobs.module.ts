@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from 'src/prisma/prisma.module';
+import { UploadsModule } from 'src/uploads/uploads.module';
 import { JobsService } from './jobs.service';
 import { MediaProcessingProcessor } from './processors/media-processing.processor';
 import { JobsController } from './jobs.controller';
@@ -10,6 +11,7 @@ import { JobsController } from './jobs.controller';
   imports: [
     ConfigModule,
     PrismaModule,
+    UploadsModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
