@@ -34,10 +34,10 @@ Create a `.env` file based on `env.example`:
 
 ```bash
 # AWS S3 Configuration
-S3_ACCESS_KEY="your-aws-access-key"
-S3_SECRET_KEY="your-aws-secret-key"
-S3_BUCKET="your-s3-bucket-name"
-S3_REGION="ap-south-1"
+AWS_ACCESS_KEY_ID="your-aws-access-key"
+AWS_SECRET_ACCESS_KEY="your-aws-secret-key"
+S3_BUCKET_NAME="your-s3-bucket-name"
+AWS_REGION="ap-south-1"
 
 # Other configurations...
 ```
@@ -46,7 +46,7 @@ S3_REGION="ap-south-1"
 
 - Ensure your AWS credentials have S3 permissions
 - Create the S3 bucket before running the application
-- The bucket should be in the region specified in `S3_REGION`
+- The bucket should be in the region specified in `AWS_REGION`
 
 ### 3. Start Services
 
@@ -84,16 +84,16 @@ docker compose up -d
 
 ## Environment Variables
 
-| Variable             | Description                  | Default      |
-| -------------------- | ---------------------------- | ------------ |
-| `S3_ACCESS_KEY`      | AWS Access Key ID            | Required     |
-| `S3_SECRET_KEY`      | AWS Secret Access Key        | Required     |
-| `S3_BUCKET`          | S3 Bucket Name               | Required     |
-| `S3_REGION`          | AWS Region                   | `ap-south-1` |
-| `DATABASE_URL`       | PostgreSQL connection string | Required     |
-| `REDIS_URL`          | Redis connection string      | Required     |
-| `JWT_SECRET`         | JWT signing secret           | Required     |
-| `JWT_REFRESH_SECRET` | JWT refresh secret           | Required     |
+| Variable                | Description                  | Default      |
+| ----------------------- | ---------------------------- | ------------ |
+| `AWS_ACCESS_KEY_ID`     | AWS Access Key ID            | Required     |
+| `AWS_SECRET_ACCESS_KEY` | AWS Secret Access Key        | Required     |
+| `S3_BUCKET_NAME`        | S3 Bucket Name               | Required     |
+| `AWS_REGION`            | AWS Region                   | `ap-south-1` |
+| `DATABASE_URL`          | PostgreSQL connection string | Required     |
+| `REDIS_URL`             | Redis connection string      | Required     |
+| `JWT_SECRET`            | JWT signing secret           | Required     |
+| `JWT_REFRESH_SECRET`    | JWT refresh secret           | Required     |
 
 ## API Endpoints
 

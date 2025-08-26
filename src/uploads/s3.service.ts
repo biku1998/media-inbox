@@ -19,17 +19,17 @@ export class S3Service {
 
   constructor(private configService: ConfigService) {
     this.bucketName =
-      this.configService.get<string>('S3_BUCKET') || 'media-inbox';
+      this.configService.get<string>('S3_BUCKET_NAME') || 'media-inbox';
 
     const endpoint = this.configService.get<string>('S3_ENDPOINT');
-    const accessKey = this.configService.get<string>('S3_ACCESS_KEY');
-    const secretKey = this.configService.get<string>('S3_SECRET_KEY');
-    const region = this.configService.get<string>('S3_REGION', 'ap-south-1');
+    const accessKey = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    const secretKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    const region = this.configService.get<string>('AWS_REGION', 'ap-south-1');
 
     // For AWS S3, endpoint is optional (uses default AWS endpoints)
     if (!accessKey || !secretKey) {
       throw new Error(
-        'Missing required S3 configuration: S3_ACCESS_KEY, S3_SECRET_KEY',
+        'Missing required S3 configuration: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY',
       );
     }
 
