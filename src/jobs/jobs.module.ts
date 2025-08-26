@@ -3,31 +3,24 @@ import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { UploadsModule } from 'src/uploads/uploads.module';
+import { AuditModule } from 'src/common/audit.module';
+import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 import { MediaProcessingProcessor } from './processors/media-processing.processor';
-import { JobsController } from './jobs.controller';
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
     forwardRef(() => UploadsModule),
+    AuditModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         redis: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
-          password: configService.get('REDIS_PASSWORD', ''),
-        },
-        defaultJobOptions: {
-          removeOnComplete: 100, // Keep last 100 completed jobs
-          removeOnFail: 50, // Keep last 50 failed jobs
-          attempts: 3, // Retry failed jobs 3 times
-          backoff: {
-            type: 'exponential',
-            delay: 2000, // Start with 2 seconds
-          },
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+          password: configService.get<string>('REDIS_PASSWORD'),
         },
       }),
       inject: [ConfigService],
@@ -47,6 +40,6 @@ import { JobsController } from './jobs.controller';
   ],
   controllers: [JobsController],
   providers: [JobsService, MediaProcessingProcessor],
-  exports: [JobsService, BullModule],
+  exports: [JobsService],
 })
 export class JobsModule {}

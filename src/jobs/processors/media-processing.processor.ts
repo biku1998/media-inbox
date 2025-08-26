@@ -11,6 +11,7 @@ import * as sharp from 'sharp';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3Service } from 'src/uploads/s3.service';
 import { ThumbnailService } from 'src/uploads/thumbnail.service';
+import { AuditService } from 'src/common/services/audit.service';
 
 import { JobsService, MediaProcessingJobData } from '../jobs.service';
 
@@ -24,6 +25,7 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
     private s3Service: S3Service,
     private thumbnailService: ThumbnailService,
     private jobsService: JobsService,
+    private auditService: AuditService,
   ) {}
 
   @OnQueueActive()
@@ -52,6 +54,13 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
     }
 
     this.logger.log(`Starting media processing for asset: ${assetId}`);
+
+    // Log job started event
+    await this.auditService.logJobEvent('system', 'JOB_STARTED', assetId, {
+      jobId: String(job.id),
+      objectKey,
+      originalFilename,
+    });
 
     // Create database job record
     let dbJob: { id: string } | null = null;
@@ -153,6 +162,15 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
         this.logger.log(`Updated database job ${dbJob.id} as completed`);
       }
 
+      // Log job completed event
+      await this.auditService.logJobEvent('system', 'JOB_COMPLETED', assetId, {
+        jobId: String(job.id),
+        objectKey,
+        originalFilename,
+        thumbnailKey,
+        processingMeta,
+      });
+
       this.logger.log(
         `Image processing completed successfully for ${originalFilename}`,
       );
@@ -170,6 +188,15 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+
+      // Log job failed event
+      await this.auditService.logJobEvent('system', 'JOB_FAILED', assetId, {
+        jobId: String(job.id),
+        objectKey,
+        originalFilename,
+        error: error instanceof Error ? error.message : String(error),
+        attempts: job.attemptsMade,
+      });
 
       // Update asset status to FAILED
       await this.prisma.asset.update({

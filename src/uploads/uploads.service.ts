@@ -6,6 +6,7 @@ import { PresignUploadDto } from './dto/presign-upload.dto';
 import { PresignResponseDto } from './dto/presign-response.dto';
 import { UploadCompleteDto } from './dto/upload-complete.dto';
 import { UploadCompleteResponseDto } from './dto/upload-complete-response.dto';
+import { AuditService } from 'src/common/services/audit.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 
@@ -17,83 +18,53 @@ export class UploadsService {
     private readonly s3Service: S3Service,
     private readonly prisma: PrismaService,
     private readonly jobsService: JobsService,
+    private readonly auditService: AuditService,
   ) {}
 
   async generatePresignedUploadUrl(
     presignDto: PresignUploadDto,
+    userId: string,
   ): Promise<PresignResponseDto> {
     // Validate file type
     this.validateFileType(presignDto.contentType);
 
-    // Generate secure object key
+    // Validate file size
+    if (presignDto.fileSize <= 0 || presignDto.fileSize > 104857600) {
+      throw new BadRequestException('Invalid file size');
+    }
+
+    // Generate unique object key
     const objectKey = this.generateObjectKey(presignDto.filename);
 
     // Generate presigned URL
-    const uploadUrl = await this.s3Service.generatePresignedPutUrl(
+    const presignedUrl = await this.s3Service.generatePresignedPutUrl(
       objectKey,
       presignDto.contentType,
       3600, // 1 hour expiration
     );
 
-    // Prepare required headers
-    const headers = {
-      'Content-Type': presignDto.contentType,
-      'x-amz-meta-original-filename': presignDto.filename,
-      'x-amz-meta-file-size': presignDto.fileSize.toString(),
-      ...(presignDto.sha256Hash && {
-        'x-amz-meta-sha256-hash': presignDto.sha256Hash,
-      }),
-    };
+    // Log upload start event
+    await this.auditService.logFileEvent(userId, 'UPLOAD_START', objectKey, {
+      filename: presignDto.filename,
+      contentType: presignDto.contentType,
+      fileSize: presignDto.fileSize,
+      objectKey,
+    });
 
     this.logger.log(
       `Generated presigned URL for ${presignDto.filename} -> ${objectKey}`,
     );
 
     return {
-      uploadUrl,
+      uploadUrl: presignedUrl,
       objectKey,
       expiresIn: 3600,
-      headers,
+      headers: {
+        'Content-Type': presignDto.contentType,
+        'x-amz-meta-original-filename': presignDto.filename,
+        'x-amz-meta-file-size': presignDto.fileSize.toString(),
+      },
     };
-  }
-
-  private validateFileType(contentType: string): void {
-    const allowedTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'application/pdf',
-      'text/plain',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
-
-    if (!allowedTypes.includes(contentType)) {
-      throw new BadRequestException(
-        `File type ${contentType} is not allowed. Allowed types: ${allowedTypes.join(', ')}`,
-      );
-    }
-  }
-
-  private generateObjectKey(filename: string): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-
-    // Generate unique identifier
-    const uuid = uuidv4();
-
-    // Get file extension
-    const ext = path.extname(filename);
-    const nameWithoutExt = path.basename(filename, ext);
-
-    // Create sanitized filename (remove special characters)
-    const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9\-_]/g, '_');
-
-    // Format: uploads/YYYY/MM/DD/uuid-sanitized-name.ext
-    return `uploads/${year}/${month}/${day}/${uuid}-${sanitizedName}${ext}`;
   }
 
   async testS3Connection(): Promise<boolean> {
@@ -145,6 +116,16 @@ export class UploadsService {
     await this.jobsService.addMediaProcessingJob(jobData);
     this.logger.log(`Media processing job enqueued for asset: ${asset.id}`);
 
+    // Log upload completion event
+    await this.auditService.logFileEvent(userId, 'UPLOAD_COMPLETE', asset.id, {
+      assetId: asset.id,
+      filename: uploadCompleteDto.filename,
+      contentType: uploadCompleteDto.contentType,
+      fileSize: uploadCompleteDto.fileSize,
+      objectKey: asset.objectKey,
+      jobEnqueued: true,
+    });
+
     return {
       assetId: asset.id,
       objectKey: asset.objectKey,
@@ -152,5 +133,44 @@ export class UploadsService {
       message: 'File uploaded successfully and queued for processing',
       completedAt: asset.createdAt.toISOString(),
     };
+  }
+
+  private validateFileType(contentType: string): void {
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'application/pdf',
+      'text/plain',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+
+    if (!allowedTypes.includes(contentType)) {
+      throw new BadRequestException(
+        `File type ${contentType} is not allowed. Allowed types: ${allowedTypes.join(', ')}`,
+      );
+    }
+  }
+
+  private generateObjectKey(filename: string): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+
+    // Generate unique identifier
+    const uuid = uuidv4();
+
+    // Get file extension
+    const ext = path.extname(filename);
+    const nameWithoutExt = path.basename(filename, ext);
+
+    // Create sanitized filename (remove special characters)
+    const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9\-_]/g, '_');
+
+    // Format: uploads/YYYY/MM/DD/uuid-sanitized-name.ext
+    return `uploads/${year}/${month}/${day}/${uuid}-${sanitizedName}${ext}`;
   }
 }
