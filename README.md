@@ -24,7 +24,7 @@ A production-ready Media Inbox backend system with async file processing pipelin
 
 ```bash
 git clone <repository-url>
-cd file-uploader
+cd media-inbox
 npm install
 ```
 
@@ -50,8 +50,11 @@ S3_REGION="ap-south-1"
 
 ### 3. Start Services
 
+#### **Option A: Local Development (Recommended)**
+
 ```bash
-# Start PostgreSQL and Redis
+# Start PostgreSQL and Redis locally (if you have them installed)
+# Or use Docker for just the databases:
 docker compose up -d postgres redis
 
 # Run database migrations
@@ -60,8 +63,17 @@ npm run db:migrate
 # Seed the database
 npm run db:seed
 
-# Start the application
+# Start the application in development mode
 npm run start:dev
+```
+
+#### **Option B: Full Docker Production**
+
+```bash
+# Start all services including the app
+docker compose up -d
+
+# The app will be available at http://localhost:3000
 ```
 
 ### 4. Access the Application
@@ -108,6 +120,23 @@ npm run start:dev
 - `GET /jobs/:id` - Job status
 - `POST /jobs/:id/retry` - Retry failed job
 - `DELETE /jobs/:id` - Delete job
+
+## Development vs Production
+
+### **Local Development (Recommended)**
+
+- **Fast startup**: Direct Node.js execution
+- **Hot reload**: Automatic code changes detection
+- **Easy debugging**: Direct access to source files
+- **Quick testing**: Immediate feedback loop
+- **IDE integration**: Full debugging and IntelliSense support
+
+### **Docker Production**
+
+- **Consistent environment**: Same setup across all deployments
+- **Isolation**: Containerized services
+- **Scalability**: Easy to deploy to multiple environments
+- **Health checks**: Built-in monitoring and restart policies
 
 ## Development
 

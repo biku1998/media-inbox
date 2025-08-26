@@ -39,18 +39,18 @@ services:
       retries: 5
       start_period: 10s
 
-  # Nest.js Application (will be built locally)
+  # Nest.js Application (Production)
   app:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: media_inbox_app
     env_file:
       - .env
     ports:
       - '${PORT:-3000}:3000'
     environment:
-      - NODE_ENV=${NODE_ENV:-development}
+      - NODE_ENV=${NODE_ENV:-production}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-media_inbox}?schema=public
       - REDIS_URL=redis://redis:6379
       - S3_ENDPOINT=${S3_ENDPOINT}
@@ -69,6 +69,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    restart: unless-stopped
 
 volumes:
   postgres_data:
