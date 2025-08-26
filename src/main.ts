@@ -7,6 +7,27 @@ import { EnvValidationService } from './common/config/env-validation.service';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Graceful shutdown handling
+  const gracefulShutdown = async (signal: string) => {
+    console.log(`🔄 Received ${signal}, starting graceful shutdown...`);
+    try {
+      await app.close();
+      console.log('✅ Application closed gracefully');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Error during graceful shutdown:', error);
+      process.exit(1);
+    }
+  };
+
+  // Handle shutdown signals
+  process.on('SIGTERM', () => {
+    void gracefulShutdown('SIGTERM');
+  });
+  process.on('SIGINT', () => {
+    void gracefulShutdown('SIGINT');
+  });
+
   // Security headers and CORS
   app.enableCors({
     origin: process.env.ALLOWED_ORIGINS?.split(',') || [

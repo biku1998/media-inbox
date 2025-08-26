@@ -5,7 +5,7 @@ import {
   OnQueueCompleted,
   OnQueueFailed,
 } from '@nestjs/bull';
-import { Logger } from '@nestjs/common';
+import { Logger, OnApplicationShutdown } from '@nestjs/common';
 import { Job } from 'bull';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { S3Service } from 'src/uploads/s3.service';
@@ -14,8 +14,9 @@ import { ThumbnailService } from 'src/uploads/thumbnail.service';
 import { JobsService, MediaProcessingJobData } from '../jobs.service';
 
 @Processor('media-processing')
-export class MediaProcessingProcessor {
+export class MediaProcessingProcessor implements OnApplicationShutdown {
   private readonly logger = new Logger(MediaProcessingProcessor.name);
+  private isShuttingDown = false;
 
   constructor(
     private prisma: PrismaService,
@@ -42,6 +43,12 @@ export class MediaProcessingProcessor {
   @Process('process-media')
   async processMedia(job: Job<MediaProcessingJobData>) {
     const { assetId, objectKey, mimeType, originalFilename } = job.data;
+
+    // Check if we're shutting down
+    if (this.isShuttingDown) {
+      this.logger.warn(`Skipping job ${job.id} - application is shutting down`);
+      throw new Error('Application is shutting down');
+    }
 
     this.logger.log(`Starting media processing for asset: ${assetId}`);
 
@@ -244,5 +251,21 @@ export class MediaProcessingProcessor {
     // Remove file extension and add thumbnail suffix
     const baseKey = originalKey.replace(/\.[^/.]+$/, '');
     return `${baseKey}_thumb.${format}`;
+  }
+
+  /**
+   * Handle graceful shutdown
+   */
+  async onApplicationShutdown(signal?: string) {
+    this.logger.log(`🔄 Shutdown signal received: ${signal}`);
+    this.isShuttingDown = true;
+
+    // Wait for current job to complete
+    this.logger.log('Waiting for current job to complete...');
+
+    // Give some time for graceful completion
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    this.logger.log('✅ Job processor shutdown completed');
   }
 }
