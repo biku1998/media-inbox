@@ -2,191 +2,165 @@ import {
   Controller,
   Get,
   Post,
-  Param,
-  UseGuards,
   Delete,
+  Param,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import {
-  JobsService,
-  JobStatusResponse,
-  QueueStatsResponse,
-} from './jobs.service';
+import { UserRole } from '@prisma/client';
+import { JobsService } from './jobs.service';
 
-@ApiTags('jobs')
+@ApiTags('Jobs')
 @Controller('jobs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@ApiBearerAuth('JWT-auth')
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Get('stats')
-  @Roles('ADMIN')
-  @ApiOperation({
-    summary: 'Get queue statistics',
-    description:
-      'Returns current queue statistics for all job types (Admin only)',
-  })
+  @ApiOperation({ summary: 'Get job queue statistics' })
   @ApiResponse({
     status: 200,
-    description: 'Queue statistics retrieved successfully',
+    description: 'Job queue statistics retrieved successfully',
     schema: {
       type: 'object',
       properties: {
-        waiting: { type: 'number', description: 'Number of waiting jobs' },
-        active: { type: 'number', description: 'Number of active jobs' },
-        completed: { type: 'number', description: 'Number of completed jobs' },
-        failed: { type: 'number', description: 'Number of failed jobs' },
-        delayed: { type: 'number', description: 'Number of delayed jobs' },
+        waiting: { type: 'number' },
+        active: { type: 'number' },
+        completed: { type: 'number' },
+        failed: { type: 'number' },
+        delayed: { type: 'number' },
       },
     },
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - valid JWT token required',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin role required',
-  })
-  async getQueueStats(): Promise<QueueStatsResponse> {
-    return this.jobsService.getQueueStats();
+  async getJobStats() {
+    return this.jobsService.getJobStats();
   }
 
   @Get(':jobId')
-  @Roles('ADMIN')
-  @ApiOperation({
-    summary: 'Get job status',
-    description: 'Returns detailed status of a specific job (Admin only)',
-  })
-  @ApiParam({
-    name: 'jobId',
-    description: 'Job ID to retrieve status for',
-    example: '123',
-  })
+  @ApiOperation({ summary: 'Get job details by ID' })
+  @ApiParam({ name: 'jobId', description: 'BullMQ job ID' })
   @ApiResponse({
     status: 200,
-    description: 'Job status retrieved successfully',
-    schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Job ID' },
-        status: { type: 'string', description: 'Current job status' },
-        progress: { type: 'number', description: 'Job progress (0-100)' },
-        data: { type: 'object', description: 'Job data' },
-        failedReason: {
-          type: 'string',
-          description: 'Failure reason if job failed',
-        },
-        processedOn: {
-          type: 'string',
-          format: 'date-time',
-          description: 'When job was processed',
-        },
-        finishedOn: {
-          type: 'string',
-          format: 'date-time',
-          description: 'When job finished',
-        },
-        attemptsMade: {
-          type: 'number',
-          description: 'Number of attempts made',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - valid JWT token required',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin role required',
+    description: 'Job details retrieved successfully',
   })
   @ApiResponse({
     status: 404,
     description: 'Job not found',
   })
-  async getJobStatus(
-    @Param('jobId') jobId: string,
-  ): Promise<JobStatusResponse> {
-    return this.jobsService.getJobStatus(jobId);
+  async getJob(@Param('jobId') jobId: string) {
+    const job = await this.jobsService.getJob(jobId);
+    if (!job) {
+      return { error: 'Job not found' };
+    }
+    return job;
   }
 
   @Post(':jobId/retry')
-  @Roles('ADMIN')
-  @ApiOperation({
-    summary: 'Retry failed job',
-    description: 'Retries a failed job (Admin only)',
-  })
-  @ApiParam({
-    name: 'jobId',
-    description: 'Job ID to retry',
-    example: '123',
-  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Retry a failed job' })
+  @ApiParam({ name: 'jobId', description: 'BullMQ job ID' })
   @ApiResponse({
     status: 200,
     description: 'Job retry initiated successfully',
   })
   @ApiResponse({
     status: 400,
-    description: 'Bad request - Job cannot be retried',
+    description: 'Job cannot be retried',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - valid JWT token required',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin role required',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Job not found',
-  })
-  async retryJob(@Param('jobId') jobId: string): Promise<{ message: string }> {
-    await this.jobsService.retryFailedJob(jobId);
-    return { message: 'Job retry initiated successfully' };
+  async retryJob(@Param('jobId') jobId: string) {
+    const success = await this.jobsService.retryJob(jobId);
+    if (success) {
+      return { message: 'Job retry initiated successfully' };
+    }
+    return { error: 'Job cannot be retried or not found' };
   }
 
   @Delete(':jobId')
-  @Roles('ADMIN')
-  @ApiOperation({
-    summary: 'Remove job',
-    description: 'Removes a job from the queue (Admin only)',
-  })
-  @ApiParam({
-    name: 'jobId',
-    description: 'Job ID to remove',
-    example: '123',
-  })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Remove a job from the queue' })
+  @ApiParam({ name: 'jobId', description: 'BullMQ job ID' })
   @ApiResponse({
     status: 200,
     description: 'Job removed successfully',
   })
   @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - valid JWT token required',
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Forbidden - Admin role required',
-  })
-  @ApiResponse({
     status: 404,
     description: 'Job not found',
   })
-  async removeJob(@Param('jobId') jobId: string): Promise<{ message: string }> {
-    await this.jobsService.removeJob(jobId);
-    return { message: 'Job removed successfully' };
+  async removeJob(@Param('jobId') jobId: string) {
+    const success = await this.jobsService.removeJob(jobId);
+    if (success) {
+      return { message: 'Job removed successfully' };
+    }
+    return { error: 'Job not found' };
+  }
+
+  @Get('asset/:assetId')
+  @ApiOperation({ summary: 'Get all jobs for a specific asset' })
+  @ApiParam({ name: 'assetId', description: 'Asset ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Asset jobs retrieved successfully',
+  })
+  async getAssetJobs(@Param('assetId') assetId: string) {
+    return this.jobsService.getAssetJobs(assetId);
+  }
+
+  @Get('database/all')
+  @ApiOperation({ summary: 'Get all database job records with pagination' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Items per page (default: 20)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Database jobs retrieved successfully',
+  })
+  @Roles(UserRole.ADMIN)
+  async getAllDatabaseJobs(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+  ) {
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 20;
+
+    return this.jobsService.getAllJobs(pageNum, limitNum);
+  }
+
+  @Post('cleanup')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clean up old completed jobs' })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    description: 'Days old (default: 30)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Cleanup completed successfully',
+  })
+  @Roles(UserRole.ADMIN)
+  async cleanupOldJobs(@Query('days') days: string = '30') {
+    const daysNum = parseInt(days, 10) || 30;
+    const count = await this.jobsService.cleanupOldJobs(daysNum);
+    return { message: `Cleaned up ${count} old completed jobs` };
   }
 }

@@ -1,28 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue, Job } from 'bull';
-import { ConfigService } from '@nestjs/config';
+import { Queue } from 'bull';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 export interface MediaProcessingJobData {
   assetId: string;
   objectKey: string;
   mimeType: string;
-  fileSize: number;
   originalFilename: string;
 }
 
-export interface JobStatusResponse {
-  id?: string | number;
-  status: string;
-  progress?: number;
-  data?: MediaProcessingJobData;
-  failedReason?: string;
-  processedOn?: number;
-  finishedOn?: number;
-  attemptsMade?: number;
-}
-
-export interface QueueStatsResponse {
+export interface JobStats {
   waiting: number;
   active: number;
   completed: number;
@@ -36,43 +24,36 @@ export class JobsService {
 
   constructor(
     @InjectQueue('media-processing') private mediaProcessingQueue: Queue,
-    private configService: ConfigService,
+    private prisma: PrismaService,
   ) {}
 
-  async addMediaProcessingJob(jobData: MediaProcessingJobData): Promise<Job> {
-    this.logger.log(
-      `Adding media processing job for asset: ${jobData.assetId}`,
-    );
+  /**
+   * Add a media processing job to the queue
+   */
+  async addMediaProcessingJob(data: MediaProcessingJobData): Promise<string> {
+    const jobId = `media-${data.assetId}`;
 
-    const job = await this.mediaProcessingQueue.add('process-media', jobData, {
-      jobId: `media-${jobData.assetId}`, // Ensure idempotency
-      priority: this.getJobPriority(jobData.mimeType),
-      delay: 1000, // 1 second delay to ensure file is fully uploaded
+    this.logger.log(`Adding media processing job for asset: ${data.assetId}`);
+
+    const job = await this.mediaProcessingQueue.add('process-media', data, {
+      jobId,
+      removeOnComplete: 100,
+      removeOnFail: 50,
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 2000,
+      },
     });
 
     this.logger.log(`Media processing job added with ID: ${job.id}`);
-    return job;
+    return job.id as string;
   }
 
-  async getJobStatus(jobId: string): Promise<JobStatusResponse> {
-    const job = await this.mediaProcessingQueue.getJob(jobId);
-    if (!job) {
-      return { status: 'not_found' };
-    }
-
-    return {
-      id: job.id,
-      status: await job.getState(),
-      progress: job.progress() as number,
-      data: job.data as MediaProcessingJobData,
-      failedReason: job.failedReason,
-      processedOn: job.processedOn,
-      finishedOn: job.finishedOn,
-      attemptsMade: job.attemptsMade,
-    };
-  }
-
-  async getQueueStats(): Promise<QueueStatsResponse> {
+  /**
+   * Get job statistics from the queue
+   */
+  async getJobStats(): Promise<JobStats> {
     const [waiting, active, completed, failed, delayed] = await Promise.all([
       this.mediaProcessingQueue.getWaiting(),
       this.mediaProcessingQueue.getActive(),
@@ -90,40 +71,134 @@ export class JobsService {
     };
   }
 
-  async retryFailedJob(jobId: string): Promise<void> {
+  /**
+   * Get a specific job by ID
+   */
+  async getJob(jobId: string) {
     const job = await this.mediaProcessingQueue.getJob(jobId);
+
     if (!job) {
-      throw new Error('Job not found');
+      return null;
     }
 
-    if ((await job.getState()) !== 'failed') {
-      throw new Error('Job is not in failed state');
-    }
+    // Get database job record if it exists
+    const dbJob = await this.prisma.job.findFirst({
+      where: {
+        assetId: (job.data as MediaProcessingJobData).assetId,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    await job.retry();
-    this.logger.log(`Retrying failed job: ${jobId}`);
+    return {
+      id: job.id,
+      name: job.name,
+      data: job.data as MediaProcessingJobData,
+      state: await job.getState(),
+      progress: job.progress() as number,
+      timestamp: job.timestamp,
+      processedOn: job.processedOn,
+      finishedOn: job.finishedOn,
+      failedReason: job.failedReason,
+      attemptsMade: job.attemptsMade,
+      databaseJob: dbJob,
+    };
   }
 
-  async removeJob(jobId: string): Promise<void> {
+  /**
+   * Retry a failed job
+   */
+  async retryJob(jobId: string): Promise<boolean> {
     const job = await this.mediaProcessingQueue.getJob(jobId);
+
     if (!job) {
-      throw new Error('Job not found');
+      return false;
+    }
+
+    const jobState = await job.getState();
+    if (jobState === 'failed') {
+      await job.retry();
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Remove a job from the queue
+   */
+  async removeJob(jobId: string): Promise<boolean> {
+    const job = await this.mediaProcessingQueue.getJob(jobId);
+
+    if (!job) {
+      return false;
     }
 
     await job.remove();
-    this.logger.log(`Removed job: ${jobId}`);
+    return true;
   }
 
-  private getJobPriority(mimeType: string): number {
-    // Higher priority for images (lower number = higher priority)
-    if (mimeType.startsWith('image/')) {
-      return 1;
-    }
-    // Medium priority for documents
-    if (mimeType.includes('pdf') || mimeType.includes('document')) {
-      return 2;
-    }
-    // Lower priority for other files
-    return 3;
+  /**
+   * Get database job records for an asset
+   */
+  async getAssetJobs(assetId: string) {
+    return this.prisma.job.findMany({
+      where: { assetId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Get all database job records with pagination
+   */
+  async getAllJobs(page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+
+    const [jobs, total] = await Promise.all([
+      this.prisma.job.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          asset: {
+            select: {
+              id: true,
+              objectKey: true,
+              status: true,
+            },
+          },
+        },
+      }),
+      this.prisma.job.count(),
+    ]);
+
+    return {
+      jobs,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Clean up old completed jobs (optional maintenance)
+   */
+  async cleanupOldJobs(daysOld: number = 30): Promise<number> {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+    const result = await this.prisma.job.deleteMany({
+      where: {
+        state: 'COMPLETED',
+        updatedAt: {
+          lt: cutoffDate,
+        },
+      },
+    });
+
+    this.logger.log(`Cleaned up ${result.count} old completed jobs`);
+    return result.count;
   }
 }

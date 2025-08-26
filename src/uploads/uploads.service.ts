@@ -139,7 +139,6 @@ export class UploadsService {
       assetId: asset.id,
       objectKey: asset.objectKey,
       mimeType: asset.mime,
-      fileSize: asset.size,
       originalFilename: uploadCompleteDto.filename,
     };
 
