@@ -105,9 +105,9 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
         await this.s3Service.downloadObjectAsBuffer(objectKey);
       this.logger.debug(`Downloaded image: ${imageBuffer.length} bytes`);
 
-      // Detect image format from buffer
-      const format = await this.detectImageFormat(imageBuffer);
-      this.logger.debug(`Detected image format: ${format}`);
+      // Extract comprehensive metadata from the image
+      const metadata = await this.extractImageMetadata(imageBuffer);
+      this.logger.debug(`Extracted metadata: ${JSON.stringify(metadata)}`);
 
       // Generate thumbnail
       this.logger.debug(`Generating thumbnail for ${originalFilename}`);
@@ -122,7 +122,10 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
       );
 
       // Generate thumbnail key
-      const thumbnailKey = this.generateThumbnailKey(objectKey, format);
+      const thumbnailKey = this.generateThumbnailKey(
+        objectKey,
+        metadata.format,
+      );
       this.logger.debug(`Generated thumbnail key: ${thumbnailKey}`);
 
       // Upload thumbnail to S3
@@ -130,12 +133,13 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
       await this.s3Service.uploadObject(
         thumbnailKey,
         thumbnailResult.buffer,
-        `image/${format}`,
+        metadata.mimeType,
       );
 
-      // Update asset with thumbnail information and mark as READY
+      // Update asset with comprehensive metadata and mark as READY
       const processingMeta = {
-        format,
+        format: metadata.format,
+        mimeType: metadata.mimeType,
         processed: true,
         processedAt: new Date().toISOString(),
         originalSize: imageBuffer.length,
@@ -146,9 +150,20 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
           100
         ).toFixed(1)}%`,
         originalFilename,
-        originalDimensions: `${thumbnailResult.metadata.width}x${thumbnailResult.metadata.height}`,
-        thumbnailGenerated: true,
+        originalDimensions: `${metadata.width}x${metadata.height}`,
         thumbnailDimensions: `${thumbnailResult.width}x${thumbnailResult.height}`,
+        metadata: {
+          width: metadata.width,
+          height: metadata.height,
+          channels: metadata.channels,
+          hasAlpha: metadata.hasAlpha,
+          hasProfile: metadata.hasProfile,
+          space: metadata.space,
+          depth: metadata.depth,
+          density: metadata.density,
+          orientation: metadata.orientation,
+        },
+        thumbnailGenerated: true,
       };
 
       await this.prisma.asset.update({
@@ -242,12 +257,23 @@ export class MediaProcessingProcessor implements OnApplicationShutdown {
   }
 
   /**
-   * Detect image format from buffer
+   * Extract comprehensive metadata from image buffer
    */
-  private async detectImageFormat(buffer: Buffer): Promise<string> {
-    // Use Sharp to detect format
+  private async extractImageMetadata(buffer: Buffer) {
     const metadata = await sharp(buffer).metadata();
-    return metadata.format || 'jpeg';
+    return {
+      format: metadata.format || 'jpeg',
+      mimeType: `image/${metadata.format || 'jpeg'}`,
+      width: metadata.width || 0,
+      height: metadata.height || 0,
+      channels: metadata.channels || 0,
+      hasAlpha: metadata.hasAlpha || false,
+      hasProfile: metadata.hasProfile || false,
+      space: metadata.space || 'srgb',
+      depth: metadata.depth || 8,
+      density: metadata.density || 96,
+      orientation: metadata.orientation || 1,
+    };
   }
 
   /**
